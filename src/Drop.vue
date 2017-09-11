@@ -10,30 +10,39 @@
 </template>
 
 <script>
-	import { smuggledDataCache, transferDataStore } from './stores';
+	import { transferDataStore } from './stores';
 	import { events, mimeType, mimeDelimiter, smuggleKeyMimeType } from './constants';
 
 	export default {
-		computed: { events: () => events },
+		data: () => ({ dataKey: null }),
+		computed: {
+			events: () => events,
+			transferDataStore: () => transferDataStore,
+			transferData() {
+				return this.transferDataStore[this.dataKey];
+			},
+		},
 		methods: {
 			emitEvent(name, nativeEvent) {
-				let data;
 				if (name === events.drop) {
-					const key = nativeEvent.dataTransfer.getData(mimeType);
-					data = key && transferDataStore[key];
+					this.dataKey = nativeEvent.dataTransfer.getData(mimeType);
 				} else {
-					if (! smuggledDataCache.isSet) {
+					if (! this.dataKey) {
 						const type = nativeEvent.dataTransfer.types.find(
 							t => t.startsWith(smuggleKeyMimeType)
 						);
 						if (type) {
-							const key = type.split(mimeDelimiter)[1];
-							smuggledDataCache.set(key && transferDataStore[key]);
+							this.dataKey = type.split(mimeDelimiter)[1];
 						}
 					}
-					data = smuggledDataCache.data;
 				}
-				this.$emit(name, data, nativeEvent);
+
+				this.$emit(name, this.transferData, nativeEvent);
+
+				// Clean up data after emitting the event.
+				if ([events.dragleave, events.drop].includes(name)) {
+					this.dataKey = null;
+				}
 			},
 		},
 	};
