@@ -5,13 +5,18 @@
 		@dragover.prevent="emitEvent(events.dragover, $event)"
 		@drop="emitEvent(events.drop, $event)"
 	>
-		<slot :transferData="transferData"></slot>
+		<slot v-if="! ($scopedSlots.dragging && transferData)"></slot>
+		<slot name="dragging" v-if="transferData" :transferData="transferData">
+		</slot>
 	</div>
 </template>
 
 <script>
 	import { transferDataStore } from './stores';
 	import { events, mimeType, mimeDelimiter, smuggleKeyMimeType } from './constants';
+
+	const insideElements = new Set();
+	let defaultDragenter = false;
 
 	export default {
 		data: () => ({ dataKey: null }),
@@ -24,6 +29,7 @@
 		},
 		methods: {
 			emitEvent(name, nativeEvent) {
+				// Before emitting the event, set the transfer data.
 				if (name === events.drop) {
 					this.dataKey = nativeEvent.dataTransfer.getData(mimeType);
 				} else {
@@ -37,11 +43,46 @@
 					}
 				}
 
+				// Emit
 				this.$emit(name, this.transferData, nativeEvent);
 
-				// Clean up data after emitting the event.
-				if ([events.dragleave, events.drop].includes(name)) {
+				/**
+				 * After emitting the event, we need to determine if we're still 
+				 * dragging inside this Drop. We keep a Set of all elements that we've
+				 * dragged into, then clear the data if that set is empty.
+				 */
+
+				 // Add to the set on dragenter.
+				if (name === events.dragenter) {
+					const isDefaultSlot = this.$slots.default.some(
+					 s => s.elm === nativeEvent.target
+					);
+					if (! insideElements.size && isDefaultSlot) {
+						defaultDragenter = true;
+					}
+					if (! isDefaultSlot) {
+						insideElements.add(nativeEvent.target);
+					}
+				}
+
+				// Remove from the set on dragleave.
+				if (name === events.dragleave) {
+					insideElements.delete(nativeEvent.target);
+					if (! insideElements.size) {
+						defaultDragenter = false;
+					}
+				}
+
+				// If we're no longer inside any elements, delete data.
+				if (insideElements.size === 0 && ! defaultDragenter) {
 					this.dataKey = null;
+				}
+
+				// A drop resets everything.
+				if (name === events.drop) {
+					this.dataKey = null;
+					insideElements.clear();
+					defaultDragenter = false;
 				}
 			},
 		},
