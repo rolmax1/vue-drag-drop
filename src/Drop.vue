@@ -5,9 +5,10 @@
 		@dragover.prevent="emitEvent(events.dragover, $event)"
 		@drop="emitEvent(events.drop, $event)"
 	>
-		<slot v-if="! ($scopedSlots.dragging && transferData)"></slot>
+		<slot v-if="! ($scopedSlots.dragging && transferData)" :transferData="transferData"></slot>
 		<slot name="dragging" v-if="transferData" :transferData="transferData">
 		</slot>
+		<slot name="persistent"></slot>
 	</div>
 </template>
 
@@ -16,7 +17,6 @@
 	import { events, mimeType, mimeDelimiter, smuggleKeyMimeType } from './constants';
 
 	const insideElements = new Set();
-	let defaultDragenter = false;
 
 	export default {
 		data: () => ({ dataKey: null }),
@@ -52,15 +52,9 @@
 				 * dragged into, then clear the data if that set is empty.
 				 */
 
-				 // Add to the set on dragenter.
+				// Add to the set on dragenter.
 				if (name === events.dragenter) {
-					const isDefaultSlot = this.$slots.default.some(
-					 s => s.elm === nativeEvent.target
-					);
-					if (! insideElements.size && isDefaultSlot) {
-						defaultDragenter = true;
-					}
-					if (! isDefaultSlot) {
+					if (insideElements.size || nativeEvent.target === this.$el) {
 						insideElements.add(nativeEvent.target);
 					}
 				}
@@ -68,21 +62,23 @@
 				// Remove from the set on dragleave.
 				if (name === events.dragleave) {
 					insideElements.delete(nativeEvent.target);
-					if (! insideElements.size) {
-						defaultDragenter = false;
-					}
-				}
 
-				// If we're no longer inside any elements, delete data.
-				if (insideElements.size === 0 && ! defaultDragenter) {
-					this.dataKey = null;
+					// If we're no longer inside any elements, delete data.
+					if (! insideElements.size) {
+						this.dataKey = null;
+					}
 				}
 
 				// A drop resets everything.
 				if (name === events.drop) {
-					this.dataKey = null;
-					insideElements.clear();
-					defaultDragenter = false;
+				  this.dataKey = null;
+				  insideElements.clear();
+				}
+
+				if (name !== events.dragover) {
+					console.log(name);
+					console.log(insideElements);
+					console.log(nativeEvent.target);
 				}
 			},
 		},
